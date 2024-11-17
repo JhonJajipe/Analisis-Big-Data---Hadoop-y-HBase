@@ -1,0 +1,44 @@
+  GNU nano 6.2                                                                                                    consultas2.py
+import happybase
+import pandas as pd
+from datetime import datetime
+
+# Bloque principal de ejecución
+try:
+    # Establecer conexión con HBase
+    connection = happybase.Connection('localhost')
+    table = connection.table('acciones')
+    print("Conexión establecida con HBase")
+
+    # Consulta filtrando por un rango de fechas
+    fecha_inicio = "2020-10-01"
+    fecha_fin = "2020-11-30"
+    print(f"\n=== Datos filtrados por fecha entre {fecha_inicio} y {fecha_fin} ===\n")
+    for key, data in table.scan():
+        fecha = data[b'nasdaq:Date'].decode()
+        if fecha_inicio <= fecha <= fecha_fin:
+            print(f"Fecha: {fecha}")
+            print(f"Precio de apertura: {data[b'nasdaq:Open'].decode()}")
+            print(f"Precio más alto: {data[b'nasdaq:High'].decode()}")
+            print(f"Precio más bajo: {data[b'nasdaq:Low'].decode()}")
+            print(f"Precio de cierre: {data[b'nasdaq:Close'].decode()}")
+            print(f"Volumen: {data[b'nasdaq:Volume'].decode()}")
+            print("")
+
+    # Consulta por una condicional mayor y menor que
+    volumen_primario = 5000000
+    volumen_segundario = 5050000
+    print(f"\n=== Datos con volumen mayor a {volumen_primario} y  menor a {volumen_segundario} ===\n\n")
+    for key, data in table.scan():
+        volumen = int(data[b'nasdaq:Volume'].decode())
+        if volumen > volumen_primario and volumen < volumen_segundario:
+            print(f"Fecha: {data[b'nasdaq:Date'].decode()}")
+            print(f"Precio de apertura: {data[b'nasdaq:Open'].decode()}")
+            print(f"Precio más alto: {data[b'nasdaq:High'].decode()}")
+            print(f"Precio más bajo: {data[b'nasdaq:Low'].decode()}")
+            print(f"Precio de cierre: {data[b'nasdaq:Close'].decode()}")
+            print(f"Volumen: {data[b'nasdaq:Volume'].decode()}")
+            print("")
+
+except Exception as e:
+    print(f"Error: {e}")
