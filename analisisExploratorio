@@ -1,0 +1,110 @@
+import happybase
+import pandas as pd
+from datetime import datetime
+
+# Bloque principal de ejecución
+try:
+    # 1. Establecer conexión con HBase
+    connection = happybase.Connection('localhost', port=9090)
+    print("Conexión establecida con HBase")
+
+    # 2. Crear la tabla con las familias de columnas
+    table_name = 'acciones'
+    families = {
+        'nasdaq': dict(),
+        'indices': dict(),
+        'refugio': dict()
+    }
+
+    # Eliminar la tabla si ya existe
+    if table_name.encode() in connection.tables():
+        print(f"Eliminando tabla existente - {table_name}")
+        connection.delete_table(table_name, disable=True)
+
+    # Crear nueva tabla
+    connection.create_table(table_name, families)
+    table = connection.table(table_name)
+    print("Tabla 'acciones' creada exitosamente")
+
+    # 3. Cargar datos del CSV
+    nasdaq_data = pd.read_csv('nasdq2.csv')
+
+    # Llenar valores nulos para evitar errores
+    nasdaq_data.fillna('', inplace=True)
+    nasdaq_data['Date'] = pd.to_datetime(nasdaq_data['Date'], format='%Y-%m-%d')
+
+    # Iterar sobre el DataFrame usando el índice
+    for index, row in nasdaq_data.iterrows():
+        date_str = row['Date']
+
+        # Convertir la fecha a cadena
+        row_key = f'nasdaq_{date_str.strftime("%Y-%m-%d")}'.encode()
+
+        # Organizar los datos en familias de columnas
+        data = {
+            b'nasdaq:Date': date_str.strftime('%Y-%m-%d').encode(),
+            b'nasdaq:Open': str(row['Open']).encode(),
+            b'nasdaq:High': str(row['High']).encode(),
+            b'nasdaq:Low': str(row['Low']).encode(),
+            b'nasdaq:Close': str(row['Close']).encode(),
+            b'nasdaq:Volume': str(row['Volume']).encode(),
+
+            b'indices:InterestRate': str(row['InterestRate']).encode(),
+            b'indices:ExchangeRate': str(row['ExchangeRate']).encode(),
+            b'indices:VIX': str(row['VIX']).encode(),
+            b'indices:TEDSpread': str(row['TEDSpread']).encode(),
+            b'indices:EFFR': str(row['EFFR']).encode(),
+
+            b'refugio:Gold': str(row['Gold']).encode(),
+            b'refugio:Oil': str(row['Oil']).encode(),
+        }
+        # Insertar los datos en la tabla de HBase
+        table.put(row_key, data)
+
+    print("Datos cargados exitosamente")
+
+    # 4. Consultas y análisis de datos
+    print("\n=== Consultas de datos (primeros 3) ===")
+    count = 0
+    for key, data in table.scan():
+        if count < 3:
+            print(f"\nFecha: {data[b'nasdaq:Date'].decode()}")
+            print(f"Precio de apertura: {data[b'nasdaq:Open'].decode()}")
+            print(f"Precio más alto: {data[b'nasdaq:High'].decode()}")
+            print(f"Precio más bajo: {data[b'nasdaq:Low'].decode()}")
+            print(f"Precio de cierre: {data[b'nasdaq:Close'].decode()}")
+            print(f"Volumen: {data[b'nasdaq:Volume'].decode()}")
+            count += 1
+
+    # 5. Filtrado de filas de 2014 y 2024 para calcular porcentaje de aumento
+    fecha_2014 = nasdaq_data[nasdaq_data['Date'].dt.year == 2014].iloc[0]
+    fecha_2024 = nasdaq_data[nasdaq_data['Date'].dt.year == 2024].iloc[0]
+
+    # 6. Guardar valores a comparar entre las fechas del 2014 y 2024
+    nasdaq_2014 = fecha_2014['Close']
+    gold_2014 = fecha_2014['Gold']
+    oil_2014 = fecha_2014['Oil']
+
+    nasdaq_2024 = fecha_2024['Close']
+    gold_2024 = fecha_2024['Gold']
+    oil_2024 = fecha_2024['Oil']
+
+    # 7. Calcular porcentaje de aumento realizando regla de 3 simple
+    nasdaq_pct_change = ((nasdaq_2024 - nasdaq_2014) / nasdaq_2014) * 100
+    gold_pct_change = ((gold_2024 - gold_2014) / gold_2014) * 100
+    oil_pct_change = ((oil_2024 - oil_2014) / oil_2014) * 100
+
+    # 8. impresion de resultados
+    print(f"\nAumento porcentual de 'nasdaq:Close' de 2014 a 2024: {nasdaq_pct_change:.2f}%")
+    print(f"Aumento porcentual de 'refugio:Gold' de 2014 a 2024: {gold_pct_change:.2f}%")
+    print(f"Aumento porcentual de 'refugio:Oil' de 2014 a 2024: {oil_pct_change:.2f}%")
+
+    # 9. ejemplo de eliminacion de registro
+    row_key_to_delete = b'nasdaq_2010-11-03'
+    table.delete(row_key_to_delete)
+    print("\nRegistro eliminado con éxito.")
+
+
+except Exception as e:
+    print(f"Error: {e}")
+
